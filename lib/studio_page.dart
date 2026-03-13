@@ -1,3 +1,7 @@
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:intl/intl.dart';
+
 class StudioPage extends StatefulWidget {
   const StudioPage({super.key});
 
@@ -7,7 +11,7 @@ class StudioPage extends StatefulWidget {
 
 class _StudioPageState extends State<StudioPage> {
   List<FileSystemEntity> _sessions = [];
-  bool _loading = true;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -15,220 +19,162 @@ class _StudioPageState extends State<StudioPage> {
     _fetchSessions();
   }
 
-  // Scansiona la cartella Flow8Sessions per trovare i file .wav
+  // Legge i file dalla cartella dedicata
   Future<void> _fetchSessions() async {
     try {
       final dir = Directory('/storage/emulated/0/Documents/Flow8Sessions');
       if (await dir.exists()) {
         final files = dir.listSync().where((f) => f.path.endsWith('.wav')).toList();
-        // Ordina per data (più recenti in alto)
+        // Ordina i file dal più recente al più vecchio
         files.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
         setState(() {
           _sessions = files;
-          _loading = false;
+          _isLoading = false;
         });
       } else {
-        setState(() => _loading = false);
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      setState(() => _loading = false);
+      debugPrint("Errore lettura file: $e");
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF050505),
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text("STUDIO - MULTITRACK", style: TextStyle(fontSize: 14)),
+        backgroundColor: const Color(0xFF111111),
+        title: const Text("SESSIONI REGISTRATE", style: TextStyle(fontSize: 14, color: Color(0xFF00E5FF))),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          icon: const Icon(Icons.arrow_back_ios, size: 18, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _loading
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF)))
           : _sessions.isEmpty
               ? _buildEmptyState()
               : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                   itemCount: _sessions.length,
-                  itemBuilder: (context, index) => _buildSessionCard(_sessions[index]),
+                  itemBuilder: (context, index) => _buildFileCard(_sessions[index]),
                 ),
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.mic_none, size: 64, color: Colors.white10),
-          const SizedBox(height: 16),
-          Text("NESSUNA REGISTRAZIONE", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold)),
+          Icon(Icons.folder_open, size: 60, color: Colors.white12),
+          SizedBox(height: 10),
+          Text("Nessuna traccia trovata", style: TextStyle(color: Colors.white24)),
         ],
       ),
     );
   }
 
-  Widget _buildSessionCard(FileSystemEntity file) {
+  Widget _buildFileCard(FileSystemEntity file) {
     String fileName = file.path.split('/').last;
-    var stats = file.statSync();
-    String date = DateFormat('dd MMM yyyy - HH:mm').format(stats.modified);
-    String size = "${(stats.size / 1024 / 1024).toStringAsFixed(1)} MB";
+    FileStat stats = file.statSync();
+    String date = DateFormat('dd/MM/yyyy HH:mm').format(stats.modified);
+    String size = "${(stats.size / (1024 * 1024)).toStringAsFixed(1)} MB";
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D0D),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white10),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
+        leading: const Icon(Icons.multitrack_audio, color: Color(0xFF00E5FF)),
         title: Text(fileName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text("$date  •  $size", style: const TextStyle(color: Colors.grey, fontSize: 10)),
-        ),
-        trailing: const Icon(Icons.tune, color: Color(0xFF00E5FF)),
-        onTap: () => _showMixerPanel(context, fileName),
+        subtitle: Text("$date  •  $size", style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        trailing: const Icon(Icons.tune, color: Colors.white38),
+        onTap: () => _openMixer(context, fileName),
       ),
     );
   }
 
-  // IL MIXER DI SCOMPOSIZIONE
-  void _showMixerPanel(BuildContext context, String fileName) {
+  void _openMixer(BuildContext context, String fileName) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: const Color(0xFF151515),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
+        height: MediaQuery.of(context).size.height * 0.8,
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Header del Mixer
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("SESSION MIXER", style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
-                    Text(fileName, style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 14)),
-                  ],
-                ),
+                Text(fileName, style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
                 IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
               ],
             ),
-            const SizedBox(height: 20),
-            
-            // Griglia degli 8 Canali
+            const Divider(color: Colors.white10),
             Expanded(
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 1.8,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  childAspectRatio: 2.2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
                 itemCount: 8,
-                itemBuilder: (context, index) => _buildTrackControl(index + 1),
+                itemBuilder: (context, index) => _buildMiniFader(index + 1),
               ),
             ),
-            
-            // Barra di trasporto (Play/Stop/Export)
-            _buildTransportBar(),
+            _buildPlayControl(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTrackControl(int ch) {
+  Widget _buildMiniFader(int ch) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white10),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("CH $ch", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-              const Icon(Icons.volume_up, size: 12, color: Colors.grey),
-            ],
-          ),
+          Text("CH $ch", style: const TextStyle(color: Colors.grey, fontSize: 10)),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: 2,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
             ),
-            child: Slider(
-              value: 0.7,
-              activeColor: const Color(0xFF00E5FF),
-              inactiveColor: Colors.white10,
-              onChanged: (v) {},
-            ),
+            child: Slider(value: 0.8, onChanged: (v) {}),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _miniButton("MUTE", Colors.red),
-              _miniButton("SOLO", Colors.orange),
-            ],
-          )
         ],
       ),
     );
   }
 
-  Widget _miniButton(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white10),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(label, style: const TextStyle(color: Colors.white30, fontSize: 8, fontWeight: FontWeight.bold)),
-    );
-  }
-
-  Widget _buildTransportBar() {
+  Widget _buildPlayControl() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _transportIcon(Icons.skip_previous),
-          const SizedBox(width: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(color: Color(0xFF00E5FF), shape: BoxShape.circle),
-            child: const Icon(Icons.play_arrow, color: Colors.black, size: 32),
+          const Icon(Icons.skip_previous, color: Colors.white, size: 30),
+          const SizedBox(width: 30),
+          const CircleAvatar(
+            radius: 30,
+            backgroundColor: Color(0xFF00E5FF),
+            child: Icon(Icons.play_arrow, color: Colors.black, size: 35),
           ),
-          const SizedBox(width: 20),
-          _transportIcon(Icons.skip_next),
-          const Spacer(),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-            onPressed: () {},
-            icon: const Icon(Icons.ios_share, size: 16),
-            label: const Text("EXPORT", style: TextStyle(fontSize: 12)),
-          )
+          const SizedBox(width: 30),
+          const Icon(Icons.skip_next, color: Colors.white, size: 30),
         ],
       ),
     );
-  }
-
-  Widget _transportIcon(IconData icon) {
-    return Icon(icon, color: Colors.white, size: 28);
   }
 }
