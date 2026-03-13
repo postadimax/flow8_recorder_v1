@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
-import 'dart:math';
 
 void main() {
   runApp(const MaterialApp(
@@ -60,7 +59,8 @@ class _Flow8StudioState extends State<Flow8Studio> {
                       color: const Color(0xFF00E5FF),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text("F8", style: TextStyle(fontWeight: FontWeight.black, fontSize: 18)),
+                    // CORRETTO: FontWeight.w900 invece di .black
+                    child: const Text("F8", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -69,7 +69,7 @@ class _Flow8StudioState extends State<Flow8Studio> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade800),
+                      border: Border.all(color: Colors.white24),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Row(
@@ -91,7 +91,7 @@ class _Flow8StudioState extends State<Flow8Studio> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF111111),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade900),
+                  border: Border.all(color: Colors.white10),
                 ),
                 child: RichText(
                   text: const TextSpan(
@@ -132,7 +132,7 @@ class _Flow8StudioState extends State<Flow8Studio> {
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.grey.shade900, borderRadius: BorderRadius.circular(12)),
+                    decoration: BoxDecoration(color: const Color(0xFF222222), borderRadius: BorderRadius.circular(12)),
                     child: const Icon(Icons.add, color: Colors.white),
                   ),
                   const SizedBox(width: 16),
@@ -144,13 +144,16 @@ class _Flow8StudioState extends State<Flow8Studio> {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: const Color(0xFF2E1515),
-                        border: Border.all(color: Colors.red.shade900, width: 2),
+                        border: Border.all(color: Colors.red.withOpacity(0.5), width: 2),
                       ),
                       child: Center(
                         child: Container(
                           width: 24,
                           height: 24,
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: _isRecording ? Colors.red : Colors.red.shade900),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle, 
+                            color: _isRecording ? Colors.red : const Color(0xFF441111)
+                          ),
                         ),
                       ),
                     ),
@@ -200,7 +203,6 @@ class _Flow8StudioState extends State<Flow8Studio> {
               children: [
                 Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                // LED SEGMENTS
                 Row(
                   children: List.generate(20, (index) {
                     return Expanded(
@@ -208,7 +210,7 @@ class _Flow8StudioState extends State<Flow8Studio> {
                         height: 16,
                         margin: const EdgeInsets.symmetric(horizontal: 1),
                         decoration: BoxDecoration(
-                          color: index < (isRecording ? 12 : 0) ? const Color(0xFF00E676) : Colors.grey.shade900,
+                          color: index < (isRecording ? 12 : 0) ? const Color(0xFF00E676) : const Color(0xFF1A1A1A),
                           borderRadius: BorderRadius.circular(1),
                         ),
                       ),
