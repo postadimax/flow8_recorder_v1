@@ -14,12 +14,14 @@ dependencies:
   path_provider: ^2.1.2
   intl: ^0.19.0
   flutter_sound: ^9.15.0  # <--- Sostituisci record con questa
+  url_launcher: ^6.2.5 # Aggiungi questa riga
 
   
 
 flutter:
 
   uses-material-design: true
+
 
 
 
