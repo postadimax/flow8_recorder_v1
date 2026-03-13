@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 import 'dart:io';
 
+import 'studio_page.dart';
+
 void main() {
   runApp(const MaterialApp(
     home: Flow8Studio(),
@@ -255,3 +257,4 @@ class _StudioPageState extends State<StudioPage> {
     );
   }
 }
+
