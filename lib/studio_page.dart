@@ -9,35 +9,82 @@ class StudioPage extends StatefulWidget {
   State<StudioPage> createState() => _StudioPageState();
 }
 
-class _StudioPageState extends State<StudioPage> {
-  List<FileSystemEntity> _sessions = [];
-  bool _isLoading = true;
+class _StudioPageState extends State<StudioPage> with TickerProviderStateMixin {
+  String _selectedFileName = "Nessun file selezionato";
+  bool _isPlaying = false;
+  double _playProgress = 0.0; // Da 0.0 a 1.0
+  Timer? _playTimer;
+  
+  // Mute status per gli 8 canali
+  List<bool> _isMuted = List.generate(8, (index) => false);
+
+  // Per lo scroll sincronizzato delle onde
+  late ScrollController _timelineController;
 
   @override
   void initState() {
     super.initState();
-    _fetchSessions();
+    _timelineController = ScrollController();
   }
 
-  // Legge i file dalla cartella dedicata
-  Future<void> _fetchSessions() async {
-    try {
-      final dir = Directory('/storage/emulated/0/Documents/Flow8Sessions');
-      if (await dir.exists()) {
-        final files = dir.listSync().where((f) => f.path.endsWith('.wav')).toList();
-        // Ordina i file dal più recente al più vecchio
-        files.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
-        setState(() {
-          _sessions = files;
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      debugPrint("Errore lettura file: $e");
-      setState(() => _isLoading = false);
+  // 1. POP-UP SELEZIONE FILE
+  void _showFileSelector() async {
+    final dir = Directory('/storage/emulated/0/Documents/Flow8Sessions');
+    List<FileSystemEntity> files = [];
+    if (await dir.exists()) {
+      files = dir.listSync().where((f) => f.path.endsWith('.wav')).toList();
     }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text("Seleziona Sessione", style: TextStyle(color: Color(0xFF00E5FF), fontSize: 16)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: files.length,
+            itemBuilder: (context, index) {
+              String name = files[index].path.split('/').last;
+              return ListTile(
+                title: Text(name, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                onTap: () {
+                  setState(() {
+                    _selectedFileName = name;
+                    _playProgress = 0.0;
+                  });
+                  Navigator.pop(context);
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  // CONTROLLI AUDIO
+  void _togglePlay() {
+    setState(() => _isPlaying = !_isPlaying);
+    if (_isPlaying) {
+      _playTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+        setState(() {
+          _playProgress += 0.002;
+          if (_playProgress >= 1.0) _stopPlay();
+        });
+      });
+    } else {
+      _playTimer?.cancel();
+    }
+  }
+
+  void _stopPlay() {
+    _playTimer?.cancel();
+    setState(() {
+      _isPlaying = false;
+      _playProgress = 0.0;
+    });
   }
 
   @override
@@ -45,136 +92,169 @@ class _StudioPageState extends State<StudioPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
-        title: const Text("SESSIONI REGISTRATE", style: TextStyle(fontSize: 14, color: Color(0xFF00E5FF))),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF)))
-          : _sessions.isEmpty
-              ? _buildEmptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  itemCount: _sessions.length,
-                  itemBuilder: (context, index) => _buildFileCard(_sessions[index]),
-                ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.folder_open, size: 60, color: Colors.white12),
-          SizedBox(height: 10),
-          Text("Nessuna traccia trovata", style: TextStyle(color: Colors.white24)),
+        backgroundColor: Colors.black,
+        title: Text(_selectedFileName, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_open, color: Color(0xFF00E5FF)),
+            onPressed: _showFileSelector,
+          )
         ],
       ),
-    );
-  }
-
-  Widget _buildFileCard(FileSystemEntity file) {
-    String fileName = file.path.split('/').last;
-    FileStat stats = file.statSync();
-    String date = DateFormat('dd/MM/yyyy HH:mm').format(stats.modified);
-    String size = "${(stats.size / (1024 * 1024)).toStringAsFixed(1)} MB";
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D0D),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: ListTile(
-        leading: const Icon(Icons.multitrack_audio, color: Color(0xFF00E5FF)),
-        title: Text(fileName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-        subtitle: Text("$date  •  $size", style: const TextStyle(color: Colors.grey, fontSize: 10)),
-        trailing: const Icon(Icons.tune, color: Colors.white38),
-        onTap: () => _openMixer(context, fileName),
-      ),
-    );
-  }
-
-  void _openMixer(BuildContext context, String fileName) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF151515),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(fileName, style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
-              ],
-            ),
-            const Divider(color: Colors.white10),
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 2.2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
+      body: Stack(
+        children: [
+          // 2. AREA CANALI CON FORME D'ONDA
+          Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  children: [
+                    _buildTrackRow(0, "1", "MIC 1"),
+                    _buildTrackRow(1, "2", "MIC 2"),
+                    _buildTrackRow(2, "3", "MIC 3"),
+                    _buildTrackRow(3, "4", "MIC 4"),
+                    _buildTrackRow(4, "5/6", "INST L/R"),
+                    _buildTrackRow(5, "7/8", "USB L/R"),
+                    _buildTrackRow(6, "M", "MONITOR"),
+                    _buildTrackRow(7, "LR", "MAIN MIX"),
+                  ],
                 ),
-                itemCount: 8,
-                itemBuilder: (context, index) => _buildMiniFader(index + 1),
+              ),
+              _buildTransportBar(),
+            ],
+          ),
+          
+          // 3. LINEA BIANCA VERTICALE (Playhead)
+          IgnorePointer(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 100), // Allineata all'inizio delle onde
+              child: Align(
+                alignment: Alignment(lerpDouble(-1, 1, _playProgress)!, 0),
+                child: Container(width: 2, color: Colors.white, height: double.infinity),
               ),
             ),
-            _buildPlayControl(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMiniFader(int ch) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text("CH $ch", style: const TextStyle(color: Colors.grey, fontSize: 10)),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 2,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-            ),
-            child: Slider(value: 0.8, onChanged: (v) {}),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPlayControl() {
+  Widget _buildTrackRow(int index, String id, String label) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      height: 70,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.skip_previous, color: Colors.white, size: 30),
-          const SizedBox(width: 30),
-          const CircleAvatar(
-            radius: 30,
-            backgroundColor: Color(0xFF00E5FF),
-            child: Icon(Icons.play_arrow, color: Colors.black, size: 35),
+          // Sezione Mute e Info (fissa a sinistra)
+          Container(
+            width: 100,
+            color: const Color(0xFF0A0A0A),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => setState(() => _isMuted[index] = !_isMuted[index]),
+                  child: Container(
+                    width: 30, height: 30,
+                    decoration: BoxDecoration(
+                      color: _isMuted[index] ? Colors.red : Colors.grey[900],
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Center(child: Text("M", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(id, style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 10)),
+                    Text(label, style: const TextStyle(color: Colors.grey, fontSize: 8)),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: 30),
-          const Icon(Icons.skip_next, color: Colors.white, size: 30),
+          
+          // Sezione Forma d'onda (scorrevole)
+          Expanded(
+            child: Opacity(
+              opacity: _isMuted[index] ? 0.2 : 1.0,
+              child: Container(
+                color: const Color(0xFF050505),
+                child: CustomPaint(
+                  painter: WaveformPainter(color: _isMuted[index] ? Colors.grey : const Color(0xFF00E5FF)),
+                  size: Size.infinite,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildTransportBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 40),
+      color: const Color(0xFF0D0D0D),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          IconButton(icon: const Icon(Icons.first_page, color: Colors.white), onPressed: _stopPlay),
+          GestureDetector(
+            onTap: _togglePlay,
+            child: CircleAvatar(
+              radius: 25,
+              backgroundColor: const Color(0xFF00E5FF),
+              child: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.black),
+            ),
+          ),
+          IconButton(icon: const Icon(Icons.stop, color: Colors.white), onPressed: _stopPlay),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _playTimer?.cancel();
+    _timelineController.dispose();
+    super.dispose();
   }
 }
+
+// DISEGNO DELLA FORMA D'ONDA (SIMULATA)
+class WaveformPainter extends CustomPainter {
+  final Color color;
+  WaveformPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withOpacity(0.5)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+
+    final double midY = size.height / 2;
+    // Generiamo piccoli segmenti verticali per simulare l'audio
+    for (double i = 0; i < size.width; i += 4) {
+      double waveHeight = (i % 30 < 15) ? 10.0 : 25.0; // Simulazione picchi
+      if (i % 100 < 20) waveHeight = 2.0; // Simulazione silenzio
+      
+      canvas.drawLine(
+        Offset(i, midY - waveHeight),
+        Offset(i, midY + waveHeight),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Funzione helper per l'animazione della linea
+double? lerpDouble(num a, num b, double t) => a + (b - a) * t;
