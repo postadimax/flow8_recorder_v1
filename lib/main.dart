@@ -205,12 +205,18 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildLibraryButton() {
-    return IconButton(
-      icon: const Icon(Icons.library_music, color: Colors.white54),
-      onPressed: () { /* Navigazione futura alla lista file */ },
-    );
-  }
+ // Nella classe _Flow8StudioState
+Widget _buildLibraryButton() {
+  return IconButton(
+    icon: const Icon(Icons.library_music, color: Color(0xFF00E5FF)),
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const StudioPage()),
+      );
+    },
+  );
+}
 
   Widget _buildSessionInfo() {
     return Container(
@@ -343,3 +349,4 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
     super.dispose();
   }
 }
+
