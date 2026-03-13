@@ -13,12 +13,14 @@ dependencies:
   permission_handler: ^11.3.1
   path_provider: ^2.1.2
   intl: ^0.19.0
-  record: ^5.2.0
+  # Usiamo la versione specifica che evita i conflitti con Linux
+  record: 5.1.0
   
 
 flutter:
 
   uses-material-design: true
+
 
 
 
