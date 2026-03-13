@@ -3,7 +3,6 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart'; // Import per aprire la cartella
 import 'dart:async';
 import 'dart:io';
 
@@ -24,15 +23,21 @@ class Flow8Studio extends StatefulWidget {
 class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin {
   FlutterSoundRecorder? _recorder;
   bool _isRecording = false;
+  
+  // Statistiche
   Timer? _timer;
   int _secondsElapsed = 0;
   double _mbConsumed = 0.0;
   String _currentFileName = "";
-  String _fullPath = "";
+  
+  // Livelli Audio
   double _currentDb = 0.0;
   StreamSubscription? _recorderSubscription;
+
+  // Sorgente
   String _selectedSource = "FLOW 8 (USB)";
   final List<String> _sources = ["FLOW 8 (USB)", "Internal Mic"];
+
   late AnimationController _pulseController;
 
   @override
@@ -47,39 +52,47 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
 
   Future<void> _initRecorder() async {
     await [Permission.microphone, Permission.storage].request();
+
     _recorder = FlutterSoundRecorder();
     await _recorder!.openRecorder();
+    
+    // Monitoraggio attivo subito (anche se non registra)
     await _recorder!.setSubscriptionDuration(const Duration(milliseconds: 40));
     _recorderSubscription = _recorder!.onProgress!.listen((e) {
-      setState(() => _currentDb = e.decibels ?? 0.0);
+      setState(() {
+        _currentDb = e.decibels ?? 0.0;
+      });
     });
   }
 
   Future<String> _getSafePath() async {
-    Directory? directory;
-    if (Platform.isAndroid) {
-      directory = Directory('/storage/emulated/0/Documents/Flow8Sessions');
-    } else {
-      directory = await getApplicationDocumentsDirectory();
-    }
-    if (!await directory.exists()) await directory.create(recursive: true);
-    return directory.path;
+    Directory dir = Directory('/storage/emulated/0/Documents/Flow8Sessions');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir.path;
   }
 
   void _startRecording() async {
     String timestamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
     _currentFileName = "multitracks_$timestamp.wav";
     String folderPath = await _getSafePath();
-    _fullPath = "$folderPath/$_currentFileName";
 
-    await _recorder!.startRecorder(toFile: _fullPath, codec: Codec.pcm16WAV);
+    // REGISTRAZIONE 8 CANALI REALE
+    await _recorder!.startRecorder(
+      toFile: "$folderPath/$_currentFileName",
+      codec: Codec.pcm16WAV,
+      numChannels: 8,
+      sampleRate: 48000,
+    );
+
     _pulseController.repeat(reverse: true);
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
         _secondsElapsed++;
-        _mbConsumed += 0.25; 
+        // 8 canali a 16bit/48kHz occupano circa 0.768 MB al secondo
+        _mbConsumed += 0.76; 
       });
     });
+
     setState(() => _isRecording = true);
   }
 
@@ -88,7 +101,9 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
     _timer?.cancel();
     _pulseController.stop();
     _pulseController.reset();
+
     _showSaveDialog();
+
     setState(() {
       _isRecording = false;
       _secondsElapsed = 0;
@@ -96,70 +111,40 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
     });
   }
 
-  // NUOVO POP-UP CON TASTO APRI CARTELLA
-  void _showSaveDialog() async {
-    String folderPath = await _getSafePath();
-    
-    if (!mounted) return;
-
+  void _showSaveDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Color(0xFF00E676)),
-            SizedBox(width: 10),
-            Text("Sessione Salvata", style: TextStyle(color: Colors.white)),
-          ],
-        ),
+        backgroundColor: const Color(0xFF151515),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text("Sessione Salvata", style: TextStyle(color: Color(0xFF00E5FF))),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("FILE: $_currentFileName", style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            const Text("PERCORSO:", style: TextStyle(color: Colors.grey, fontSize: 10)),
-            Text(folderPath, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            Text("File: $_currentFileName", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            const Text("Cartella: Documents/Flow8Sessions", style: TextStyle(color: Colors.grey, fontSize: 11)),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CHIUDI", style: TextStyle(color: Colors.grey)),
+            onPressed: () => Navigator.pop(context), 
+            child: const Text("OK", style: TextStyle(color: Colors.grey))
           ),
-          ElevatedButton.icon(
+          ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E5FF)),
-            onPressed: () async {
-              final Uri uri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADocuments%2FFlow8Sessions");
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri);
-              } else {
-                // Fallback se il link diretto non funziona
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Usa un Gestore File per aprire Documents/Flow8Sessions"))
-                );
-              }
-            },
-            icon: const Icon(Icons.folder_open, color: Colors.black, size: 18),
-            label: const Text("APRI CARTELLA", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            onPressed: () {
+              Navigator.pop(context);
+              // Qui andrai alla pagina studio (da creare)
+            }, 
+            child: const Text("APRI STUDIO", style: TextStyle(color: Colors.black))
           ),
         ],
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _recorder?.closeRecorder();
-    _recorderSubscription?.cancel();
-    _timer?.cancel();
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  // --- UI ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,20 +155,20 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
           child: Column(
             children: [
               _buildHeader(),
-              const SizedBox(height: 10),
-              _buildProjectBanner(),
-              const SizedBox(height: 10),
+              const SizedBox(height: 15),
+              _buildSessionInfo(),
+              const SizedBox(height: 15),
               Expanded(
                 child: ListView(
                   children: [
-                    _buildChannelRow("1", "MIC / LINE 1", canReceive: true),
-                    _buildChannelRow("2", "MIC / LINE 2", canReceive: _selectedSource == "FLOW 8 (USB)"),
-                    _buildChannelRow("3", "MIC / LINE 3", canReceive: _selectedSource == "FLOW 8 (USB)"),
-                    _buildChannelRow("4", "MIC / LINE 4", canReceive: _selectedSource == "FLOW 8 (USB)"),
-                    _buildChannelRow("5/6", "INST / LINE (L/R)", canReceive: _selectedSource == "FLOW 8 (USB)"),
-                    _buildChannelRow("7/8", "USB / BT (L/R)", canReceive: _selectedSource == "FLOW 8 (USB)"),
-                    _buildChannelRow("MON", "MONITOR SEND", canReceive: true),
-                    _buildChannelRow("MAIN", "MAIN OUT", canReceive: true),
+                    _buildChannelRow("1", "MIC 1", true),
+                    _buildChannelRow("2", "MIC 2", _selectedSource.contains("USB")),
+                    _buildChannelRow("3", "MIC 3", _selectedSource.contains("USB")),
+                    _buildChannelRow("4", "MIC 4", _selectedSource.contains("USB")),
+                    _buildChannelRow("5/6", "INST L/R", _selectedSource.contains("USB")),
+                    _buildChannelRow("7/8", "USB L/R", _selectedSource.contains("USB")),
+                    _buildChannelRow("M", "MONITOR", true),
+                    _buildChannelRow("LR", "MAIN MIX", true),
                   ],
                 ),
               ),
@@ -209,51 +194,64 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
             child: DropdownButton<String>(
               value: _selectedSource,
               dropdownColor: const Color(0xFF111111),
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
               items: _sources.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
               onChanged: (v) => setState(() => _selectedSource = v!),
             ),
           ),
         ),
-        Icon(Icons.circle, color: _isRecording ? Colors.red : Colors.green, size: 12),
+        _buildLibraryButton(),
       ],
     );
   }
 
-  Widget _buildProjectBanner() {
+  Widget _buildLibraryButton() {
+    return IconButton(
+      icon: const Icon(Icons.library_music, color: Colors.white54),
+      onPressed: () { /* Navigazione futura alla lista file */ },
+    );
+  }
+
+  Widget _buildSessionInfo() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: const Color(0xFF0D0D0D), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white10)),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0D0D),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
+      ),
       child: Text(
-        _isRecording ? "REC IN CORSO..." : "PRONTO PER IL MULTITRACCIA",
-        style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 12),
+        _isRecording ? "RECORDING: $_currentFileName" : "ENGINE READY - 8 CHANNELS ENABLED",
+        style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.2),
       ),
     );
   }
 
-  Widget _buildChannelRow(String id, String label, {required bool canReceive}) {
+  Widget _buildChannelRow(String id, String label, bool active) {
     int segmentsLit = 0;
-    if (canReceive) {
-      segmentsLit = ((_currentDb - 20) / 4.5).clamp(0, 20).toInt();
+    if (active) {
+      // Sensibilità LED: regola qui per rendere i LED più o meno reattivi
+      segmentsLit = ((_currentDb - 25) / 4).clamp(0, 20).toInt();
     }
+
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(color: const Color(0xFF0D0D0D), borderRadius: BorderRadius.circular(8)),
       child: Row(
         children: [
-          SizedBox(width: 35, child: Text(id, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+          SizedBox(width: 35, child: Text(id, style: TextStyle(color: active ? Colors.white : Colors.white10, fontWeight: FontWeight.bold))),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(color: canReceive ? Colors.grey : Colors.white10, fontSize: 8, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 5),
+                Text(label, style: TextStyle(color: active ? Colors.grey : Colors.white10, fontSize: 8)),
+                const SizedBox(height: 6),
                 Row(
                   children: List.generate(20, (index) {
                     bool isLit = index < segmentsLit;
-                    Color ledColor = (index > 16) ? Colors.red : (index > 12 ? Colors.orange : const Color(0xFF00E676));
+                    Color ledColor = (index > 16) ? Colors.red : (index > 13 ? Colors.orange : const Color(0xFF00E676));
                     return Expanded(
                       child: Container(
                         height: 12,
@@ -275,39 +273,15 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
   }
 
   Widget _buildFooter() {
-    return Container(
-      padding: const EdgeInsets.only(top: 10),
+    return Padding(
+      padding: const EdgeInsets.only(top: 15),
       child: Row(
         children: [
-          _buildStat("TIME", _formatTime(_secondsElapsed), isBlue: true),
-          const SizedBox(width: 20),
-          _buildStat("DATA", "${_mbConsumed.toStringAsFixed(1)} MB"),
+          _buildStat("ELAPSED TIME", _formatTime(_secondsElapsed), isBlue: true),
+          const SizedBox(width: 30),
+          _buildStat("STORAGE USE", "${_mbConsumed.toStringAsFixed(1)} MB"),
           const Spacer(),
-          GestureDetector(
-            onTap: () => _isRecording ? _stopRecording() : _startRecording(),
-            child: AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, child) {
-                return Opacity(
-                  opacity: _isRecording ? 0.5 + (_pulseController.value * 0.5) : 1.0,
-                  child: Container(
-                    width: 60, height: 60,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF2E1515),
-                      border: Border.all(color: Colors.red.withOpacity(0.5), width: 3),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 25, height: 25,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: _isRecording ? Colors.red : const Color(0xFF551111)),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
+          _buildRecordButton(),
         ],
       ),
     );
@@ -318,14 +292,54 @@ class _Flow8StudioState extends State<Flow8Studio> with TickerProviderStateMixin
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 9)),
-        Text(value, style: TextStyle(color: isBlue ? const Color(0xFF00E5FF) : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(value, style: TextStyle(color: isBlue ? const Color(0xFF00E5FF) : Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
       ],
     );
   }
 
-  String _formatTime(int totalSeconds) {
-    int m = totalSeconds ~/ 60;
-    int s = totalSeconds % 60;
+  Widget _buildRecordButton() {
+    return GestureDetector(
+      onTap: () => _isRecording ? _stopRecording() : _startRecording(),
+      child: AnimatedBuilder(
+        animation: _pulseController,
+        builder: (context, child) {
+          return Opacity(
+            opacity: _isRecording ? 0.4 + (_pulseController.value * 0.6) : 1.0,
+            child: Container(
+              width: 70, height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF2E1515),
+                border: Border.all(color: Colors.red.withOpacity(0.5), width: 4),
+              ),
+              child: Center(
+                child: Container(
+                  width: 30, height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle, 
+                    color: _isRecording ? Colors.red : const Color(0xFF551111)
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      ),
+    );
+  }
+
+  String _formatTime(int sec) {
+    int m = sec ~/ 60;
+    int s = sec % 60;
     return "${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}";
+  }
+
+  @override
+  void dispose() {
+    _recorder?.closeRecorder();
+    _recorderSubscription?.cancel();
+    _timer?.cancel();
+    _pulseController.dispose();
+    super.dispose();
   }
 }
